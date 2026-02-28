@@ -335,6 +335,7 @@
       <p>ヘッダーの「イベントCSV読込」ボタンからCSVファイルを選択してください（複数選択可）</p>
     </div>
     <div id="eventDashboard" style="display:none;">
+      <h2 id="eventTitle" style="font-size:16px;color:#374151;margin-bottom:12px;"></h2>
       <div class="event-selector">
         <label for="eventSelect">イベント選択:</label>
         <select id="eventSelect"></select>
@@ -736,6 +737,7 @@ function renderEventDashboard() {
   try {
     document.getElementById('eventEmpty').style.display = 'none';
     document.getElementById('eventDashboard').style.display = 'block';
+    document.getElementById('eventTitle').textContent = currentEventName;
 
     const rows = data.rows;
 
@@ -1006,6 +1008,7 @@ ${snapshot.member ? `
 ${Object.keys(snapshot.events).length ? `
 <div class="tab-content${snapshot.member ? '' : ' active'}" id="tab-event">
   <div class="container">
+    <h2 id="eventTitle" style="font-size:16px;color:#374151;margin-bottom:12px;">${Object.keys(snapshot.events)[0] || ''}</h2>
     ${Object.keys(snapshot.events).length > 1 ? `
     <div class="event-selector">
       <label for="eventSelect">イベント選択:</label>
@@ -1057,6 +1060,7 @@ function renderMember() {
 let currentEvent = Object.keys(SNAPSHOT.events)[0] || null;
 function renderEvent() {
   const d = SNAPSHOT.events[currentEvent]; if (!d) return;
+  document.getElementById('eventTitle').textContent = currentEvent;
   document.getElementById('eventTotal').innerHTML = d.total+'<span class="unit">名</span>';
   document.getElementById('eventMember').innerHTML = d.memberCount+'<span class="unit">名</span>';
   document.getElementById('eventNonMember').innerHTML = d.nonMemberCount+'<span class="unit">名</span>';
