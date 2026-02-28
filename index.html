@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>運転と作業療法学会 ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --brand: #90C876;
+    --brand-dark: #6ba854;
+    --brand-light: #e8f5e0;
+    --brand-bg: #f4faf0;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #ffffff 0%, var(--brand-bg) 100%);
+    border-bottom: 2px solid var(--brand);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  .header-text h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--gray-900);
+    line-height: 1.3;
+  }
+
+  .header-text .subtitle {
+    font-size: 12px;
+    color: var(--gray-500);
+    font-weight: 500;
+  }
+
+  .upload-area {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid var(--brand);
+    border-radius: 8px;
+    background: white;
+    color: var(--brand-dark);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .upload-btn:hover {
+    background: var(--brand-light);
+    border-color: var(--brand-dark);
+  }
+
+  .upload-btn svg { width: 16px; height: 16px; }
+
+  .tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 24px;
+  }
+
+  .tab {
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--gray-500);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .tab:hover { color: var(--gray-700); }
+
+  .tab.active {
+    color: var(--brand-dark);
+    border-bottom-color: var(--brand);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 24px;
+    color: var(--gray-500);
+  }
+
+  .empty-state svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .empty-state h3 { font-size: 16px; margin-bottom: 8px; color: var(--gray-700); }
+  .empty-state p { font-size: 14px; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--brand);
+  }
+
+  .kpi-card .label {
+    font-size: 13px;
+    color: var(--gray-500);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .kpi-card .value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--gray-900);
+  }
+
+  .kpi-card .unit {
+    font-size: 14px;
+    color: var(--gray-500);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .kpi-card .sub-label {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 4px;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .chart-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .chart-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .chart-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 16px;
+  }
+
+  .chart-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .chart-container.bar-chart { height: 400px; }
+  .chart-container.doughnut-chart { height: 350px; }
+  .chart-container.tall-bar-chart { min-height: 600px; }
+
+  .event-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .event-selector label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--gray-700);
+  }
+
+  .event-selector select {
+    padding: 8px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: var(--gray-900);
+    min-width: 300px;
+  }
+
+  .file-input { display: none; }
+
+  @media print {
+    .header { position: static; }
+    .upload-area { display: none; }
+    .tabs { display: none; }
+    .tab-content { display: block !important; page-break-inside: avoid; }
+    .chart-card { break-inside: avoid; page-break-inside: avoid; }
+  }
+
+  @media (max-width: 768px) {
+    .chart-grid { grid-template-columns: 1fr; }
+    .header { padding: 12px 16px; }
+    .container { padding: 16px; }
+    .header-text h1 { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <img src="logo.png" alt="学会ロゴ" class="header-logo">
+    <div class="header-text">
+      <h1>一般社団法人 運転と作業療法学会</h1>
+      <div class="subtitle">ダッシュボード</div>
+    </div>
+  </div>
+  <div class="upload-area">
+    <label class="upload-btn" for="memberFileInput">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+      会員CSV読込
+    </label>
+    <input type="file" id="memberFileInput" class="file-input" accept=".csv">
+
+    <label class="upload-btn" for="eventFileInput">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+      イベントCSV読込
+    </label>
+    <input type="file" id="eventFileInput" class="file-input" accept=".csv" multiple>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="member">会員データ</div>
+  <div class="tab" data-tab="event">イベント参加者データ</div>
+</div>
+
+<!-- 会員タブ -->
+<div class="tab-content active" id="tab-member">
+  <div class="container">
+    <div id="memberEmpty" class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <h3>会員CSVを読み込んでください</h3>
+      <p>ヘッダーの「会員CSV読込」ボタンからCSVファイルを選択してください</p>
+    </div>
+    <div id="memberDashboard" style="display:none;">
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="label">総会員数</div>
+          <div class="value" id="memberTotal">0<span class="unit">名</span></div>
+          <div class="sub-label" id="memberDate"></div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>所属都道府県別 会員数</h3>
+          <div class="chart-container tall-bar-chart">
+            <canvas id="memberPrefChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>所属機関の領域別 会員数</h3>
+          <div class="chart-container doughnut-chart">
+            <canvas id="memberAreaChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- イベント参加者タブ -->
+<div class="tab-content" id="tab-event">
+  <div class="container">
+    <div id="eventEmpty" class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <h3>イベントCSVを読み込んでください</h3>
+      <p>ヘッダーの「イベントCSV読込」ボタンからCSVファイルを選択してください（複数選択可）</p>
+    </div>
+    <div id="eventDashboard" style="display:none;">
+      <div class="event-selector">
+        <label for="eventSelect">イベント選択:</label>
+        <select id="eventSelect"></select>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="label">総参加者数</div>
+          <div class="value" id="eventTotal">0<span class="unit">名</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">会員</div>
+          <div class="value" id="eventMember">0<span class="unit">名</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">非会員</div>
+          <div class="value" id="eventNonMember">0<span class="unit">名</span></div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>会員/非会員別 参加者数</h3>
+          <div class="chart-container bar-chart">
+            <canvas id="eventMembershipChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>経験年数別 参加者数</h3>
+          <div class="chart-container bar-chart">
+            <canvas id="eventExpChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>所属都道府県別 参加者数</h3>
+          <div class="chart-container tall-bar-chart">
+            <canvas id="eventPrefChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>所属機関の領域別 参加者数</h3>
+          <div class="chart-container doughnut-chart">
+            <canvas id="eventAreaChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Chart.js datalabels プラグインを登録
+Chart.register(ChartDataLabels);
+
+// ===== 定数・設定 =====
+const PREF_ORDER = [
+  '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+  '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+  '新潟県','富山県','石川県','福井県','山梨県','長野県',
+  '岐阜県','静岡県','愛知県','三重県',
+  '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+  '鳥取県','島根県','岡山県','広島県','山口県',
+  '徳島県','香川県','愛媛県','高知県',
+  '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'
+];
+
+const AREA_COLORS = {
+  '急性期': '#ef4444',
+  '回復期': '#3b82f6',
+  '生活期': '#10b981',
+  '教育・研究': '#f59e0b',
+  'その他': '#6b7280'
+};
+
+// ===== 領域自動分類（改善版） =====
+function classifyArea(facilityName, deptName) {
+  const text = (facilityName || '') + ' ' + (deptName || '');
+
+  // 1. 自動車学校・ドライビングスクール → その他（教育より先に判定）
+  if (/自動車学校|ドライビングスクール|教習所/.test(text)) return 'その他';
+
+  // 2. 回復期（リハビリテーション病院・センターは回復期。教育より先に判定）
+  //    「リハビシテーション」等のtypoも対応
+  if (/回復期|リハビリテーション病院|リハビリテーションセンター|リハビリ病院|リハビリセンター|リハビシテーション|療護センター|温泉病院/.test(text)) return '回復期';
+
+  // 3. 大学病院・医科大学の附属病院 → 急性期（教育より先に判定）
+  if (/大学病院|大学医学部附属|医科大学.*病院|大学.*附属.*病院/.test(text)) return '急性期';
+
+  // 4. 教育・研究
+  if (/大学|専門学校|学院|学部|学科|講座|研究/.test(text)) return '教育・研究';
+
+  // 5. 生活期
+  if (/生活期|訪問|通所|デイ|介護老人|老健|居宅|在宅|地域|クリニック|診療所|デイケア|デイサービス|グループホーム|特別養護|障害者|障がい者|就労|介護予防|ヘルスケア|支援センター/.test(text)) return '生活期';
+
+  // 6. 急性期（明確なキーワード）
+  if (/急性期|救急|救命|ICU|SCU|総合病院|綜合病院|医療センター|中央病院|市民病院|県立病院|国立病院|赤十字|済生会|労災病院|厚生病院|共済病院|記念病院|脳神経外科|脳外科|附属病院/.test(text)) return '急性期';
+
+  // 7. 一般的な「〇〇病院」で上記に該当しないもの
+  //    部署名に回復期のヒントがあれば回復期に分類
+  if (/病院/.test(text)) {
+    if (/回復期/.test(deptName || '')) return '回復期';
+    // 病院名で更に細分化
+    if (/こころ|精神|心療|メンタル/.test(text)) return '生活期';
+    if (/リハビリ/.test(text)) return '回復期';
+    // 病床規模が不明な一般病院 → 急性期（一般病院は急性期が多い傾向）
+    return '急性期';
+  }
+
+  return 'その他';
+}
+
+// ===== ファイル名から日付を抽出 =====
+function extractDateFromFilename(filename) {
+  // member_20260228 → 2026年02月28日
+  const m = filename.match(/(\d{4})(\d{2})(\d{2})/);
+  if (m) {
+    return m[1] + '年' + parseInt(m[2], 10) + '月' + parseInt(m[3], 10) + '日現在';
+  }
+  // 2026-02-28 形式
+  const m2 = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m2) {
+    return m2[1] + '年' + parseInt(m2[2], 10) + '月' + parseInt(m2[3], 10) + '日現在';
+  }
+  return '';
+}
+
+// ===== 都道府県名の正規化 =====
+function normalizePref(pref) {
+  if (!pref) return '';
+  let p = pref.trim();
+  if (p && !/(都|道|府|県)$/.test(p)) {
+    if (p === '東京') p = '東京都';
+    else if (p === '北海道') p = '北海道';
+    else if (p === '大阪') p = '大阪府';
+    else if (p === '京都') p = '京都府';
+    else if (/茨城|栃木|群馬|埼玉|千葉|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄|青森|岩手|宮城|秋田|山形|福島/.test(p)) {
+      p = p + '県';
+    }
+  }
+  return p;
+}
+
+// ===== チャートインスタンス管理 =====
+const charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) {
+    charts[id].destroy();
+    delete charts[id];
+  }
+}
+
+// ===== ドーナツチャート共通オプション（人数表示付き） =====
+function createDoughnutChart(canvasId, chartKey, labels, values, colors, totalCount) {
+  destroyChart(chartKey);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[chartKey] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 16,
+            font: { size: 13 },
+            generateLabels: function(chart) {
+              const data = chart.data;
+              return data.labels.map((label, i) => ({
+                text: label + '  ' + data.datasets[0].data[i] + '名',
+                fillStyle: data.datasets[0].backgroundColor[i],
+                strokeStyle: '#fff',
+                lineWidth: 2,
+                hidden: false,
+                index: i
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.label + ': ' + ctx.raw + '名 (' + Math.round(ctx.raw / totalCount * 100) + '%)'
+          }
+        },
+        datalabels: {
+          color: '#fff',
+          font: { weight: 'bold', size: 13 },
+          formatter: (value) => value + '名',
+          display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0
+        }
+      }
+    }
+  });
+}
+
+// ===== 会員データ処理 =====
+let memberData = null;
+let memberFileName = '';
+
+function processMemberCSV(file) {
+  memberFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const decoder = new TextDecoder('shift-jis');
+    const text = decoder.decode(new Uint8Array(e.target.result));
+
+    const result = Papa.parse(text, { header: false, skipEmptyLines: true });
+    const rows = result.data;
+    if (rows.length < 2) { alert('CSVデータが空です'); return; }
+
+    const header = rows[0];
+    const dataRows = rows.slice(1);
+
+    const prefIdx = header.findIndex(h => h.includes('都道府県'));
+    const facilityIdx = header.findIndex(h => h.includes('所属機関名'));
+    const deptIdx = header.findIndex(h => h.includes('部署名'));
+
+    memberData = dataRows.map(row => ({
+      prefecture: normalizePref(row[prefIdx] || ''),
+      facility: (row[facilityIdx] || '').trim(),
+      department: (row[deptIdx] || '').trim(),
+      area: classifyArea(row[facilityIdx] || '', row[deptIdx] || '')
+    }));
+
+    renderMemberDashboard();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderMemberDashboard() {
+  if (!memberData) return;
+
+  document.getElementById('memberEmpty').style.display = 'none';
+  document.getElementById('memberDashboard').style.display = 'block';
+
+  // KPI
+  document.getElementById('memberTotal').innerHTML = memberData.length + '<span class="unit">名</span>';
+  const dateStr = extractDateFromFilename(memberFileName);
+  document.getElementById('memberDate').textContent = dateStr;
+
+  // 都道府県別
+  const prefCounts = {};
+  memberData.forEach(m => { if (m.prefecture) prefCounts[m.prefecture] = (prefCounts[m.prefecture] || 0) + 1; });
+  const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
+  const prefValues = sortedPrefs.map(p => prefCounts[p]);
+
+  destroyChart('memberPref');
+  const prefCtx = document.getElementById('memberPrefChart').getContext('2d');
+  document.getElementById('memberPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
+  charts['memberPref'] = new Chart(prefCtx, {
+    type: 'bar',
+    data: {
+      labels: sortedPrefs,
+      datasets: [{
+        label: '会員数',
+        data: prefValues,
+        backgroundColor: 'rgba(144, 200, 118, 0.8)',
+        borderColor: '#90C876',
+        borderWidth: 1,
+        borderRadius: 4,
+        barThickness: 16
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+        datalabels: { display: false }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  // 領域別
+  const areaCounts = {};
+  memberData.forEach(m => { areaCounts[m.area] = (areaCounts[m.area] || 0) + 1; });
+  const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
+  const areaValues = areaLabels.map(k => areaCounts[k]);
+  const areaColors = areaLabels.map(k => AREA_COLORS[k]);
+
+  createDoughnutChart('memberAreaChart', 'memberArea', areaLabels, areaValues, areaColors, memberData.length);
+}
+
+// ===== イベントデータ処理 =====
+const eventDataMap = {};
+let currentEventName = null;
+
+function processEventCSV(files) {
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const buffer = new Uint8Array(e.target.result);
+      let text;
+
+      if (buffer.length >= 2 && ((buffer[0] === 0xFF && buffer[1] === 0xFE) || (buffer[0] === 0xFE && buffer[1] === 0xFF))) {
+        text = new TextDecoder('utf-16').decode(buffer);
+      } else {
+        try {
+          text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+        } catch {
+          text = new TextDecoder('shift-jis').decode(buffer);
+        }
+      }
+
+      const firstLine = text.split('\n')[0];
+      const delimiter = (firstLine.split('\t').length > firstLine.split(',').length) ? '\t' : ',';
+
+      const result = Papa.parse(text, { header: false, delimiter: delimiter, skipEmptyLines: true });
+      const rows = result.data;
+      if (rows.length < 2) { alert('CSVデータが空です: ' + file.name); return; }
+
+      const header = rows[0].map(h => h.trim().replace(/^"|"$/g, ''));
+      const dataRows = rows.slice(1);
+
+      const ticketIdx = header.findIndex(h => h.includes('チケット'));
+      const prefIdx = header.findIndex(h => h.includes('都道府県'));
+      const facilityIdx = header.findIndex(h => h.includes('施設'));
+      const expIdx = header.findIndex(h => h.includes('経験年数'));
+      const statusIdx = header.findIndex(h => h.includes('ステータス'));
+
+      let eventName = file.name.replace(/\.csv$/i, '').replace(/-\d{4}-\d{2}-\d{2}T.*$/, '');
+      if (eventName.length > 60) eventName = eventName.substring(0, 60) + '...';
+
+      const parsed = dataRows.map(row => {
+        const cells = row.map(c => (c || '').trim().replace(/^"|"$/g, ''));
+        const ticketName = ticketIdx >= 0 ? cells[ticketIdx] : '';
+        const isMember = /会員/.test(ticketName) && !/非会員/.test(ticketName);
+        const isNonMember = /非会員/.test(ticketName);
+        const status = statusIdx >= 0 ? cells[statusIdx] : '';
+        const expRaw = expIdx >= 0 ? cells[expIdx] : '';
+        const expYears = parseInt(expRaw.replace(/[^0-9]/g, ''), 10);
+
+        return {
+          ticketName,
+          isMember,
+          isNonMember,
+          prefectureRaw: prefIdx >= 0 ? cells[prefIdx] : '',
+          prefecture: '',
+          facility: facilityIdx >= 0 ? cells[facilityIdx] : '',
+          expYears: isNaN(expYears) ? null : expYears,
+          status,
+          area: classifyArea(facilityIdx >= 0 ? cells[facilityIdx] : '', '')
+        };
+      });
+
+      parsed.forEach(p => {
+        p.prefecture = normalizePref(p.prefectureRaw);
+      });
+
+      const hasStatus = parsed.some(p => p.status);
+      const filteredData = hasStatus ? parsed.filter(p => p.status !== '不参加') : parsed;
+
+      eventDataMap[eventName] = { rows: filteredData, allRows: parsed, fileName: file.name };
+
+      updateEventSelector();
+      if (!currentEventName) {
+        currentEventName = eventName;
+        document.getElementById('eventSelect').value = eventName;
+      }
+      renderEventDashboard();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function updateEventSelector() {
+  const select = document.getElementById('eventSelect');
+  const names = Object.keys(eventDataMap);
+  select.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  if (currentEventName && names.includes(currentEventName)) {
+    select.value = currentEventName;
+  }
+}
+
+function renderEventDashboard() {
+  const data = eventDataMap[currentEventName];
+  if (!data) return;
+
+  document.getElementById('eventEmpty').style.display = 'none';
+  document.getElementById('eventDashboard').style.display = 'block';
+
+  const rows = data.rows;
+
+  // KPI
+  const memberCount = rows.filter(r => r.isMember).length;
+  const nonMemberCount = rows.filter(r => r.isNonMember).length;
+  document.getElementById('eventTotal').innerHTML = rows.length + '<span class="unit">名</span>';
+  document.getElementById('eventMember').innerHTML = memberCount + '<span class="unit">名</span>';
+  document.getElementById('eventNonMember').innerHTML = nonMemberCount + '<span class="unit">名</span>';
+
+  // 会員/非会員別
+  destroyChart('eventMembership');
+  const mCtx = document.getElementById('eventMembershipChart').getContext('2d');
+  charts['eventMembership'] = new Chart(mCtx, {
+    type: 'bar',
+    data: {
+      labels: ['会員', '非会員'],
+      datasets: [{
+        label: '参加者数',
+        data: [memberCount, nonMemberCount],
+        backgroundColor: ['rgba(144, 200, 118, 0.8)', '#f59e0b'],
+        borderRadius: 6,
+        barThickness: 60
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+        datalabels: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // 経験年数分布（5年刻み）
+  const expBuckets = { '0-4年': 0, '5-9年': 0, '10-14年': 0, '15-19年': 0, '20-24年': 0, '25-29年': 0, '30年以上': 0 };
+  rows.forEach(r => {
+    if (r.expYears === null) return;
+    if (r.expYears < 5) expBuckets['0-4年']++;
+    else if (r.expYears < 10) expBuckets['5-9年']++;
+    else if (r.expYears < 15) expBuckets['10-14年']++;
+    else if (r.expYears < 20) expBuckets['15-19年']++;
+    else if (r.expYears < 25) expBuckets['20-24年']++;
+    else if (r.expYears < 30) expBuckets['25-29年']++;
+    else expBuckets['30年以上']++;
+  });
+
+  destroyChart('eventExp');
+  const eCtx = document.getElementById('eventExpChart').getContext('2d');
+  charts['eventExp'] = new Chart(eCtx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(expBuckets),
+      datasets: [{
+        label: '参加者数',
+        data: Object.values(expBuckets),
+        backgroundColor: '#8b5cf6',
+        borderRadius: 6,
+        barThickness: 36
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+        datalabels: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // 都道府県別
+  const prefCounts = {};
+  rows.forEach(r => { if (r.prefecture) prefCounts[r.prefecture] = (prefCounts[r.prefecture] || 0) + 1; });
+  const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
+  const prefValues = sortedPrefs.map(p => prefCounts[p]);
+
+  destroyChart('eventPref');
+  const pCtx = document.getElementById('eventPrefChart').getContext('2d');
+  document.getElementById('eventPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
+  charts['eventPref'] = new Chart(pCtx, {
+    type: 'bar',
+    data: {
+      labels: sortedPrefs,
+      datasets: [{
+        label: '参加者数',
+        data: prefValues,
+        backgroundColor: 'rgba(144, 200, 118, 0.8)',
+        borderColor: '#90C876',
+        borderWidth: 1,
+        borderRadius: 4,
+        barThickness: 16
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+        datalabels: { display: false }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  // 領域別
+  const areaCounts = {};
+  rows.forEach(r => { areaCounts[r.area] = (areaCounts[r.area] || 0) + 1; });
+  const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
+  const areaValues = areaLabels.map(k => areaCounts[k]);
+  const areaColors = areaLabels.map(k => AREA_COLORS[k]);
+
+  createDoughnutChart('eventAreaChart', 'eventArea', areaLabels, areaValues, areaColors, rows.length);
+}
+
+// ===== イベントリスナー =====
+document.getElementById('memberFileInput').addEventListener('change', function(e) {
+  if (e.target.files.length > 0) processMemberCSV(e.target.files[0]);
+});
+
+document.getElementById('eventFileInput').addEventListener('change', function(e) {
+  if (e.target.files.length > 0) processEventCSV(e.target.files);
+});
+
+document.getElementById('eventSelect').addEventListener('change', function(e) {
+  currentEventName = e.target.value;
+  renderEventDashboard();
+});
+
+// タブ切り替え
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
