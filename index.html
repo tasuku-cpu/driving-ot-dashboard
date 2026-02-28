@@ -279,6 +279,11 @@
       イベントCSV読込
     </label>
     <input type="file" id="eventFileInput" class="file-input" accept=".csv" multiple>
+
+    <button class="upload-btn" id="snapshotBtn" style="display:none;" onclick="downloadSnapshot()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      共有用HTMLをダウンロード
+    </button>
   </div>
 </div>
 
@@ -625,6 +630,8 @@ function renderMemberDashboard() {
   const areaColors = areaLabels.map(k => AREA_COLORS[k]);
 
   createDoughnutChart('memberAreaChart', 'memberArea', areaLabels, areaValues, areaColors, memberData.length);
+
+  updateSnapshotBtn();
 }
 
 // ===== イベントデータ処理 =====
@@ -853,6 +860,8 @@ function renderEventDashboard() {
   const areaColors = areaLabels.map(k => AREA_COLORS[k]);
 
   createDoughnutChart('eventAreaChart', 'eventArea', areaLabels, areaValues, areaColors, rows.length);
+
+  updateSnapshotBtn();
 }
 
 // ===== イベントリスナー =====
@@ -868,6 +877,224 @@ document.getElementById('eventSelect').addEventListener('change', function(e) {
   currentEventName = e.target.value;
   renderEventDashboard();
 });
+
+// ===== スナップショット共有機能 =====
+// データ読み込み時にダウンロードボタンを表示
+function updateSnapshotBtn() {
+  const hasData = memberData || Object.keys(eventDataMap).length > 0;
+  document.getElementById('snapshotBtn').style.display = hasData ? '' : 'none';
+}
+
+// ロゴをbase64に変換
+function getLogoBase64() {
+  return new Promise((resolve) => {
+    const img = document.querySelector('.header-logo');
+    if (!img || !img.complete || !img.naturalWidth) { resolve(''); return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    try { resolve(canvas.toDataURL('image/png')); } catch { resolve(''); }
+  });
+}
+
+// 集計データのみを収集（個人情報は含まない）
+function collectAggregatedData() {
+  const snapshot = { member: null, events: {} };
+
+  if (memberData) {
+    const prefCounts = {};
+    const areaCounts = {};
+    memberData.forEach(m => {
+      if (m.prefecture) prefCounts[m.prefecture] = (prefCounts[m.prefecture] || 0) + 1;
+      areaCounts[m.area] = (areaCounts[m.area] || 0) + 1;
+    });
+    snapshot.member = {
+      total: memberData.length,
+      dateStr: extractDateFromFilename(memberFileName),
+      prefCounts,
+      areaCounts
+    };
+  }
+
+  for (const [name, data] of Object.entries(eventDataMap)) {
+    const rows = data.rows;
+    const memberCount = rows.filter(r => r.isMember).length;
+    const nonMemberCount = rows.filter(r => r.isNonMember).length;
+    const prefCounts = {};
+    const areaCounts = {};
+    const expBuckets = { '0-4年': 0, '5-9年': 0, '10-14年': 0, '15-19年': 0, '20-24年': 0, '25-29年': 0, '30年以上': 0 };
+    rows.forEach(r => {
+      if (r.prefecture) prefCounts[r.prefecture] = (prefCounts[r.prefecture] || 0) + 1;
+      areaCounts[r.area] = (areaCounts[r.area] || 0) + 1;
+      if (r.expYears !== null) {
+        if (r.expYears < 5) expBuckets['0-4年']++;
+        else if (r.expYears < 10) expBuckets['5-9年']++;
+        else if (r.expYears < 15) expBuckets['10-14年']++;
+        else if (r.expYears < 20) expBuckets['15-19年']++;
+        else if (r.expYears < 25) expBuckets['20-24年']++;
+        else if (r.expYears < 30) expBuckets['25-29年']++;
+        else expBuckets['30年以上']++;
+      }
+    });
+    snapshot.events[name] = { total: rows.length, memberCount, nonMemberCount, prefCounts, areaCounts, expBuckets };
+  }
+
+  return snapshot;
+}
+
+async function downloadSnapshot() {
+  const snapshot = collectAggregatedData();
+  const logoDataUrl = await getLogoBase64();
+  const today = new Date();
+  const dateLabel = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>運転と作業療法学会 ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"><\/script>
+<style>${document.querySelector('style').textContent}</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-title">
+    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="学会ロゴ" class="header-logo">` : ''}
+    <div class="header-text">
+      <h1>一般社団法人 運転と作業療法学会</h1>
+      <div class="subtitle">ダッシュボード（閲覧専用）</div>
+    </div>
+  </div>
+</div>
+<div class="tabs">
+  ${snapshot.member ? '<div class="tab active" data-tab="member">会員データ</div>' : ''}
+  ${Object.keys(snapshot.events).length ? `<div class="tab${snapshot.member ? '' : ' active'}" data-tab="event">イベント参加者データ</div>` : ''}
+</div>
+${snapshot.member ? `
+<div class="tab-content active" id="tab-member">
+  <div class="container">
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="label">総会員数</div>
+        <div class="value">${snapshot.member.total}<span class="unit">名</span></div>
+        ${snapshot.member.dateStr ? `<div class="sub-label">${snapshot.member.dateStr}</div>` : ''}
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>所属都道府県別 会員数</h3>
+        <div class="chart-container tall-bar-chart"><canvas id="memberPrefChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>所属機関の領域別 会員数</h3>
+        <div class="chart-container doughnut-chart"><canvas id="memberAreaChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>` : ''}
+${Object.keys(snapshot.events).length ? `
+<div class="tab-content${snapshot.member ? '' : ' active'}" id="tab-event">
+  <div class="container">
+    ${Object.keys(snapshot.events).length > 1 ? `
+    <div class="event-selector">
+      <label for="eventSelect">イベント選択:</label>
+      <select id="eventSelect">${Object.keys(snapshot.events).map(n => `<option value="${n}">${n}</option>`).join('')}</select>
+    </div>` : ''}
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="label">総参加者数</div><div class="value" id="eventTotal">0<span class="unit">名</span></div></div>
+      <div class="kpi-card"><div class="label">会員</div><div class="value" id="eventMember">0<span class="unit">名</span></div></div>
+      <div class="kpi-card"><div class="label">非会員</div><div class="value" id="eventNonMember">0<span class="unit">名</span></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>会員/非会員別 参加者数</h3><div class="chart-container bar-chart"><canvas id="eventMembershipChart"></canvas></div></div>
+      <div class="chart-card"><h3>経験年数別 参加者数</h3><div class="chart-container bar-chart"><canvas id="eventExpChart"></canvas></div></div>
+      <div class="chart-card"><h3>所属都道府県別 参加者数</h3><div class="chart-container tall-bar-chart"><canvas id="eventPrefChart"></canvas></div></div>
+      <div class="chart-card"><h3>所属機関の領域別 参加者数</h3><div class="chart-container doughnut-chart"><canvas id="eventAreaChart"></canvas></div></div>
+    </div>
+  </div>
+</div>` : ''}
+<script>
+Chart.register(ChartDataLabels);
+const SNAPSHOT = ${JSON.stringify(snapshot)};
+const PREF_ORDER = ${JSON.stringify(PREF_ORDER)};
+const AREA_COLORS = ${JSON.stringify(AREA_COLORS)};
+const charts = {};
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+function createDoughnutChart(canvasId, chartKey, labels, values, colors, total) {
+  destroyChart(chartKey);
+  charts[chartKey] = new Chart(document.getElementById(canvasId).getContext('2d'), {
+    type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: {
+      legend: { position: 'bottom', labels: { padding: 16, font: { size: 13 }, generateLabels: c => c.data.labels.map((l,i) => ({ text: l+'  '+c.data.datasets[0].data[i]+'名', fillStyle: c.data.datasets[0].backgroundColor[i], strokeStyle: '#fff', lineWidth: 2, hidden: false, index: i })) } },
+      tooltip: { callbacks: { label: c => c.label+': '+c.raw+'名 ('+Math.round(c.raw/total*100)+'%)' } },
+      datalabels: { color: '#fff', font: { weight: 'bold', size: 13 }, formatter: v => v+'名', display: c => c.dataset.data[c.dataIndex]>0 }
+    }}
+  });
+}
+function renderMember() {
+  const d = SNAPSHOT.member; if (!d) return;
+  const prefs = PREF_ORDER.filter(p => d.prefCounts[p]);
+  document.getElementById('memberPrefChart').parentElement.style.height = Math.max(400, prefs.length*22)+'px';
+  destroyChart('mp');
+  charts['mp'] = new Chart(document.getElementById('memberPrefChart').getContext('2d'), {
+    type: 'bar', data: { labels: prefs, datasets: [{ data: prefs.map(p=>d.prefCounts[p]), backgroundColor: 'rgba(144,200,118,0.8)', borderColor: '#90C876', borderWidth: 1, borderRadius: 4, barThickness: 16 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>c.raw+'名' } }, datalabels: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } }, y: { grid: { display: false } } } }
+  });
+  const aLabels = Object.keys(AREA_COLORS).filter(k => d.areaCounts[k]);
+  createDoughnutChart('memberAreaChart', 'ma', aLabels, aLabels.map(k=>d.areaCounts[k]), aLabels.map(k=>AREA_COLORS[k]), d.total);
+}
+let currentEvent = Object.keys(SNAPSHOT.events)[0] || null;
+function renderEvent() {
+  const d = SNAPSHOT.events[currentEvent]; if (!d) return;
+  document.getElementById('eventTotal').innerHTML = d.total+'<span class="unit">名</span>';
+  document.getElementById('eventMember').innerHTML = d.memberCount+'<span class="unit">名</span>';
+  document.getElementById('eventNonMember').innerHTML = d.nonMemberCount+'<span class="unit">名</span>';
+  destroyChart('em');
+  charts['em'] = new Chart(document.getElementById('eventMembershipChart').getContext('2d'), {
+    type: 'bar', data: { labels: ['会員','非会員'], datasets: [{ data: [d.memberCount,d.nonMemberCount], backgroundColor: ['rgba(144,200,118,0.8)','#f59e0b'], borderRadius: 6, barThickness: 60 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>c.raw+'名' } }, datalabels: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } } }
+  });
+  destroyChart('ee');
+  charts['ee'] = new Chart(document.getElementById('eventExpChart').getContext('2d'), {
+    type: 'bar', data: { labels: Object.keys(d.expBuckets), datasets: [{ data: Object.values(d.expBuckets), backgroundColor: '#8b5cf6', borderRadius: 6, barThickness: 36 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>c.raw+'名' } }, datalabels: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } } }
+  });
+  const prefs = PREF_ORDER.filter(p => d.prefCounts[p]);
+  document.getElementById('eventPrefChart').parentElement.style.height = Math.max(400, prefs.length*22)+'px';
+  destroyChart('ep');
+  charts['ep'] = new Chart(document.getElementById('eventPrefChart').getContext('2d'), {
+    type: 'bar', data: { labels: prefs, datasets: [{ data: prefs.map(p=>d.prefCounts[p]), backgroundColor: 'rgba(144,200,118,0.8)', borderColor: '#90C876', borderWidth: 1, borderRadius: 4, barThickness: 16 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c=>c.raw+'名' } }, datalabels: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } }, y: { grid: { display: false } } } }
+  });
+  const aLabels = Object.keys(AREA_COLORS).filter(k => d.areaCounts[k]);
+  createDoughnutChart('eventAreaChart', 'ea', aLabels, aLabels.map(k=>d.areaCounts[k]), aLabels.map(k=>AREA_COLORS[k]), d.total);
+}
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+  });
+});
+const sel = document.getElementById('eventSelect');
+if (sel) sel.addEventListener('change', e => { currentEvent = e.target.value; renderEvent(); });
+renderMember();
+renderEvent();
+<\/script>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dashboard_' + dateLabel + '.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 // タブ切り替え
 document.querySelectorAll('.tab').forEach(tab => {
