@@ -575,61 +575,65 @@ function processMemberCSV(file) {
 function renderMemberDashboard() {
   if (!memberData) return;
 
-  document.getElementById('memberEmpty').style.display = 'none';
-  document.getElementById('memberDashboard').style.display = 'block';
+  try {
+    document.getElementById('memberEmpty').style.display = 'none';
+    document.getElementById('memberDashboard').style.display = 'block';
 
-  // KPI
-  document.getElementById('memberTotal').innerHTML = memberData.length + '<span class="unit">名</span>';
-  const dateStr = extractDateFromFilename(memberFileName);
-  document.getElementById('memberDate').textContent = dateStr;
+    // KPI
+    document.getElementById('memberTotal').innerHTML = memberData.length + '<span class="unit">名</span>';
+    const dateStr = extractDateFromFilename(memberFileName);
+    document.getElementById('memberDate').textContent = dateStr;
 
-  // 都道府県別
-  const prefCounts = {};
-  memberData.forEach(m => { if (m.prefecture) prefCounts[m.prefecture] = (prefCounts[m.prefecture] || 0) + 1; });
-  const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
-  const prefValues = sortedPrefs.map(p => prefCounts[p]);
+    // 都道府県別
+    const prefCounts = {};
+    memberData.forEach(m => { if (m.prefecture) prefCounts[m.prefecture] = (prefCounts[m.prefecture] || 0) + 1; });
+    const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
+    const prefValues = sortedPrefs.map(p => prefCounts[p]);
 
-  destroyChart('memberPref');
-  const prefCtx = document.getElementById('memberPrefChart').getContext('2d');
-  document.getElementById('memberPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
-  charts['memberPref'] = new Chart(prefCtx, {
-    type: 'bar',
-    data: {
-      labels: sortedPrefs,
-      datasets: [{
-        label: '会員数',
-        data: prefValues,
-        backgroundColor: 'rgba(144, 200, 118, 0.8)',
-        borderColor: '#90C876',
-        borderWidth: 1,
-        borderRadius: 4,
-        barThickness: 16
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
-        datalabels: { display: false }
+    destroyChart('memberPref');
+    const prefCtx = document.getElementById('memberPrefChart').getContext('2d');
+    document.getElementById('memberPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
+    charts['memberPref'] = new Chart(prefCtx, {
+      type: 'bar',
+      data: {
+        labels: sortedPrefs,
+        datasets: [{
+          label: '会員数',
+          data: prefValues,
+          backgroundColor: 'rgba(144, 200, 118, 0.8)',
+          borderColor: '#90C876',
+          borderWidth: 1,
+          borderRadius: 4,
+          barThickness: 16
+        }]
       },
-      scales: {
-        x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
-        y: { grid: { display: false } }
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+          datalabels: { display: false }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          y: { grid: { display: false } }
+        }
       }
-    }
-  });
+    });
 
-  // 領域別
-  const areaCounts = {};
-  memberData.forEach(m => { areaCounts[m.area] = (areaCounts[m.area] || 0) + 1; });
-  const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
-  const areaValues = areaLabels.map(k => areaCounts[k]);
-  const areaColors = areaLabels.map(k => AREA_COLORS[k]);
+    // 領域別
+    const areaCounts = {};
+    memberData.forEach(m => { areaCounts[m.area] = (areaCounts[m.area] || 0) + 1; });
+    const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
+    const areaValues = areaLabels.map(k => areaCounts[k]);
+    const areaColors = areaLabels.map(k => AREA_COLORS[k]);
 
-  createDoughnutChart('memberAreaChart', 'memberArea', areaLabels, areaValues, areaColors, memberData.length);
+    createDoughnutChart('memberAreaChart', 'memberArea', areaLabels, areaValues, areaColors, memberData.length);
+  } catch (e) {
+    console.error('会員データ描画エラー:', e);
+  }
 
   updateSnapshotBtn();
 }
@@ -729,137 +733,141 @@ function renderEventDashboard() {
   const data = eventDataMap[currentEventName];
   if (!data) return;
 
-  document.getElementById('eventEmpty').style.display = 'none';
-  document.getElementById('eventDashboard').style.display = 'block';
+  try {
+    document.getElementById('eventEmpty').style.display = 'none';
+    document.getElementById('eventDashboard').style.display = 'block';
 
-  const rows = data.rows;
+    const rows = data.rows;
 
-  // KPI
-  const memberCount = rows.filter(r => r.isMember).length;
-  const nonMemberCount = rows.filter(r => r.isNonMember).length;
-  document.getElementById('eventTotal').innerHTML = rows.length + '<span class="unit">名</span>';
-  document.getElementById('eventMember').innerHTML = memberCount + '<span class="unit">名</span>';
-  document.getElementById('eventNonMember').innerHTML = nonMemberCount + '<span class="unit">名</span>';
+    // KPI
+    const memberCount = rows.filter(r => r.isMember).length;
+    const nonMemberCount = rows.filter(r => r.isNonMember).length;
+    document.getElementById('eventTotal').innerHTML = rows.length + '<span class="unit">名</span>';
+    document.getElementById('eventMember').innerHTML = memberCount + '<span class="unit">名</span>';
+    document.getElementById('eventNonMember').innerHTML = nonMemberCount + '<span class="unit">名</span>';
 
-  // 会員/非会員別
-  destroyChart('eventMembership');
-  const mCtx = document.getElementById('eventMembershipChart').getContext('2d');
-  charts['eventMembership'] = new Chart(mCtx, {
-    type: 'bar',
-    data: {
-      labels: ['会員', '非会員'],
-      datasets: [{
-        label: '参加者数',
-        data: [memberCount, nonMemberCount],
-        backgroundColor: ['rgba(144, 200, 118, 0.8)', '#f59e0b'],
-        borderRadius: 6,
-        barThickness: 60
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
-        datalabels: { display: false }
+    // 会員/非会員別
+    destroyChart('eventMembership');
+    const mCtx = document.getElementById('eventMembershipChart').getContext('2d');
+    charts['eventMembership'] = new Chart(mCtx, {
+      type: 'bar',
+      data: {
+        labels: ['会員', '非会員'],
+        datasets: [{
+          label: '参加者数',
+          data: [memberCount, nonMemberCount],
+          backgroundColor: ['rgba(144, 200, 118, 0.8)', '#f59e0b'],
+          borderRadius: 6,
+          barThickness: 60
+        }]
       },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
-        x: { grid: { display: false } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+          datalabels: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          x: { grid: { display: false } }
+        }
       }
-    }
-  });
+    });
 
-  // 経験年数分布（5年刻み）
-  const expBuckets = { '0-4年': 0, '5-9年': 0, '10-14年': 0, '15-19年': 0, '20-24年': 0, '25-29年': 0, '30年以上': 0 };
-  rows.forEach(r => {
-    if (r.expYears === null) return;
-    if (r.expYears < 5) expBuckets['0-4年']++;
-    else if (r.expYears < 10) expBuckets['5-9年']++;
-    else if (r.expYears < 15) expBuckets['10-14年']++;
-    else if (r.expYears < 20) expBuckets['15-19年']++;
-    else if (r.expYears < 25) expBuckets['20-24年']++;
-    else if (r.expYears < 30) expBuckets['25-29年']++;
-    else expBuckets['30年以上']++;
-  });
+    // 経験年数分布（5年刻み）
+    const expBuckets = { '0-4年': 0, '5-9年': 0, '10-14年': 0, '15-19年': 0, '20-24年': 0, '25-29年': 0, '30年以上': 0 };
+    rows.forEach(r => {
+      if (r.expYears === null) return;
+      if (r.expYears < 5) expBuckets['0-4年']++;
+      else if (r.expYears < 10) expBuckets['5-9年']++;
+      else if (r.expYears < 15) expBuckets['10-14年']++;
+      else if (r.expYears < 20) expBuckets['15-19年']++;
+      else if (r.expYears < 25) expBuckets['20-24年']++;
+      else if (r.expYears < 30) expBuckets['25-29年']++;
+      else expBuckets['30年以上']++;
+    });
 
-  destroyChart('eventExp');
-  const eCtx = document.getElementById('eventExpChart').getContext('2d');
-  charts['eventExp'] = new Chart(eCtx, {
-    type: 'bar',
-    data: {
-      labels: Object.keys(expBuckets),
-      datasets: [{
-        label: '参加者数',
-        data: Object.values(expBuckets),
-        backgroundColor: '#8b5cf6',
-        borderRadius: 6,
-        barThickness: 36
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
-        datalabels: { display: false }
+    destroyChart('eventExp');
+    const eCtx = document.getElementById('eventExpChart').getContext('2d');
+    charts['eventExp'] = new Chart(eCtx, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(expBuckets),
+        datasets: [{
+          label: '参加者数',
+          data: Object.values(expBuckets),
+          backgroundColor: '#8b5cf6',
+          borderRadius: 6,
+          barThickness: 36
+        }]
       },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
-        x: { grid: { display: false } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+          datalabels: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          x: { grid: { display: false } }
+        }
       }
-    }
-  });
+    });
 
-  // 都道府県別
-  const prefCounts = {};
-  rows.forEach(r => { if (r.prefecture) prefCounts[r.prefecture] = (prefCounts[r.prefecture] || 0) + 1; });
-  const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
-  const prefValues = sortedPrefs.map(p => prefCounts[p]);
+    // 都道府県別
+    const prefCounts = {};
+    rows.forEach(r => { if (r.prefecture) prefCounts[r.prefecture] = (prefCounts[r.prefecture] || 0) + 1; });
+    const sortedPrefs = PREF_ORDER.filter(p => prefCounts[p]);
+    const prefValues = sortedPrefs.map(p => prefCounts[p]);
 
-  destroyChart('eventPref');
-  const pCtx = document.getElementById('eventPrefChart').getContext('2d');
-  document.getElementById('eventPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
-  charts['eventPref'] = new Chart(pCtx, {
-    type: 'bar',
-    data: {
-      labels: sortedPrefs,
-      datasets: [{
-        label: '参加者数',
-        data: prefValues,
-        backgroundColor: 'rgba(144, 200, 118, 0.8)',
-        borderColor: '#90C876',
-        borderWidth: 1,
-        borderRadius: 4,
-        barThickness: 16
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
-        datalabels: { display: false }
+    destroyChart('eventPref');
+    const pCtx = document.getElementById('eventPrefChart').getContext('2d');
+    document.getElementById('eventPrefChart').parentElement.style.height = Math.max(400, sortedPrefs.length * 22) + 'px';
+    charts['eventPref'] = new Chart(pCtx, {
+      type: 'bar',
+      data: {
+        labels: sortedPrefs,
+        datasets: [{
+          label: '参加者数',
+          data: prefValues,
+          backgroundColor: 'rgba(144, 200, 118, 0.8)',
+          borderColor: '#90C876',
+          borderWidth: 1,
+          borderRadius: 4,
+          barThickness: 16
+        }]
       },
-      scales: {
-        x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
-        y: { grid: { display: false } }
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw + '名' } },
+          datalabels: { display: false }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          y: { grid: { display: false } }
+        }
       }
-    }
-  });
+    });
 
-  // 領域別
-  const areaCounts = {};
-  rows.forEach(r => { areaCounts[r.area] = (areaCounts[r.area] || 0) + 1; });
-  const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
-  const areaValues = areaLabels.map(k => areaCounts[k]);
-  const areaColors = areaLabels.map(k => AREA_COLORS[k]);
+    // 領域別
+    const areaCounts = {};
+    rows.forEach(r => { areaCounts[r.area] = (areaCounts[r.area] || 0) + 1; });
+    const areaLabels = Object.keys(AREA_COLORS).filter(k => areaCounts[k]);
+    const areaValues = areaLabels.map(k => areaCounts[k]);
+    const areaColors = areaLabels.map(k => AREA_COLORS[k]);
 
-  createDoughnutChart('eventAreaChart', 'eventArea', areaLabels, areaValues, areaColors, rows.length);
+    createDoughnutChart('eventAreaChart', 'eventArea', areaLabels, areaValues, areaColors, rows.length);
+  } catch (e) {
+    console.error('イベントデータ描画エラー:', e);
+  }
 
   updateSnapshotBtn();
 }
@@ -882,7 +890,7 @@ document.getElementById('eventSelect').addEventListener('change', function(e) {
 // データ読み込み時にダウンロードボタンを表示
 function updateSnapshotBtn() {
   const hasData = memberData || Object.keys(eventDataMap).length > 0;
-  document.getElementById('snapshotBtn').style.display = hasData ? '' : 'none';
+  document.getElementById('snapshotBtn').style.display = hasData ? 'inline-flex' : 'none';
 }
 
 // ロゴをbase64に変換
